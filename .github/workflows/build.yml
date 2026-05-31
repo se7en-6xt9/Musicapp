@@ -24,24 +24,34 @@ jobs:
     - name: Make gradlew executable
       run: chmod +x ./gradlew
     
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug
-    
-    - name: Build Release AAB
-      run: ./gradlew bundleRelease
+    - name: Decode Keystore
+      run: |
+        if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > release.keystore
+        fi
+
+    - name: Build Debug and Release Apks
+      run: ./gradlew assembleDebug assembleRelease bundleRelease
       env:
-        KEYSTORE_PATH: ${{ secrets.KEYSTORE_PATH }}
+        KEYSTORE_PATH: ${{ secrets.KEYSTORE_BASE64 != '' && 'release.keystore' || '' }}
         STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
     
-    - name: Upload APK artifacts
+    - name: Upload Debug APK
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: apk-debug
         path: app/build/outputs/apk/debug/
     
-    - name: Upload AAB artifacts
+    - name: Upload Release APK
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: apk-release
+        path: app/build/outputs/apk/release/
+    
+    - name: Upload Release AAB
       uses: actions/upload-artifact@v4
       if: always()
       with:

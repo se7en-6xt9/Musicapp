@@ -35,9 +35,12 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.example.ui.theme.*
+import com.example.ui.*
 import coil.compose.AsyncImage
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
+
+enum class Screen { HOME, SEARCH, LIBRARY }
 
 class MainActivity : ComponentActivity() {
   private val viewModel: MainViewModel by viewModels()
@@ -48,13 +51,20 @@ class MainActivity : ComponentActivity() {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     setContent {
+      val currentScreen = remember { mutableStateOf(Screen.HOME) }
+      val uiState by viewModel.uiState.collectAsState()
+
       MyApplicationTheme {
         Scaffold(
           modifier = Modifier.fillMaxSize(),
-          bottomBar = { BottomNavigationBar() }
+          bottomBar = { BottomNavigationBar(currentScreen.value) { currentScreen.value = it } }
         ) { innerPadding ->
           Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            MainContent(viewModel, mediaController.value)
+            when (currentScreen.value) {
+                Screen.HOME -> MainContent(viewModel, mediaController.value)
+                Screen.SEARCH -> SearchScreen(viewModel, mediaController.value)
+                Screen.LIBRARY -> LibraryScreen(viewModel, mediaController.value)
+            }
             MiniPlayer(
               viewModel = viewModel,
               mediaController = mediaController.value,
@@ -64,6 +74,9 @@ class MainActivity : ComponentActivity() {
                 .padding(bottom = 8.dp)
             )
           }
+        }
+        if (uiState.isFullScreenPlayerOpen) {
+           FullScreenPlayer(viewModel = viewModel, mediaController = mediaController.value, onClose = { viewModel.setFullScreenPlayerOpen(false) })
         }
       }
     }
@@ -108,15 +121,7 @@ fun MainContent(viewModel: MainViewModel, mediaController: MediaController?) {
       QuickPicksSection(
         songs = uiState.songs,
         onSongClick = { song -> 
-            viewModel.playSong(song)
-            mediaController?.let { controller ->
-                song.previewUrl?.let { url ->
-                    val mediaItem = MediaItem.fromUri(url)
-                    controller.setMediaItem(mediaItem)
-                    controller.prepare()
-                    controller.play()
-                }
-            }
+            viewModel.playSong(song, uiState.songs)
         },
         modifier = Modifier.padding(horizontal = 16.dp)
       )
@@ -128,15 +133,7 @@ fun MainContent(viewModel: MainViewModel, mediaController: MediaController?) {
                     title = title,
                     songs = sectionSongs,
                     onSongClick = { song -> 
-                        viewModel.playSong(song)
-                        mediaController?.let { controller ->
-                            song.previewUrl?.let { url ->
-                                val mediaItem = MediaItem.fromUri(url)
-                                controller.setMediaItem(mediaItem)
-                                controller.prepare()
-                                controller.play()
-                            }
-                        }
+                        viewModel.playSong(song, sectionSongs)
                     },
                     modifier = Modifier.padding(top = 24.dp)
                 )
@@ -370,12 +367,36 @@ fun MiniPlayer(
           override fun onIsPlayingChanged(isPlayingChange: Boolean) {
               isPlaying = isPlayingChange
           }
+          override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+              if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                  viewModel.playNext()
+              }
+          }
+          override fun onPlaybackStateChanged(playbackState: Int) {
+              if (playbackState == Player.STATE_ENDED) {
+                  viewModel.playNext()
+              }
+          }
       }
       mediaController?.addListener(listener)
       isPlaying = mediaController?.isPlaying == true
 
       onDispose {
           mediaController?.removeListener(listener)
+      }
+  }
+
+  // Update MediaController when currentSong changes
+  LaunchedEffect(currentSong) {
+      if (currentSong != null && currentSong.previewUrl != null) {
+          mediaController?.let { controller ->
+             val mediaItem = MediaItem.fromUri(currentSong.previewUrl)
+             if (controller.currentMediaItem?.localConfiguration?.uri?.toString() != currentSong.previewUrl) {
+                 controller.setMediaItem(mediaItem)
+                 controller.prepare()
+                 controller.play()
+             }
+          }
       }
   }
 
@@ -387,6 +408,7 @@ fun MiniPlayer(
       .height(64.dp)
       .clip(RoundedCornerShape(16.dp))
       .background(SurfacePlayer)
+      .clickable { viewModel.setFullScreenPlayerOpen(true) }
   ) {
     Row(
       modifier = Modifier
@@ -449,7 +471,7 @@ fun MiniPlayer(
             tint = TextPrimary
           )
         }
-        IconButton(onClick = { }) {
+        IconButton(onClick = { viewModel.playNext() }) {
           Icon(
             imageVector = Icons.Filled.SkipNext,
             contentDescription = "Next",
@@ -462,7 +484,7 @@ fun MiniPlayer(
 }
 
 @Composable
-fun BottomNavigationBar() {
+fun BottomNavigationBar(currentScreen: Screen, onScreenSelected: (Screen) -> Unit) {
   NavigationBar(
     containerColor = SurfaceNav,
     contentColor = TextSecondary,
@@ -472,8 +494,8 @@ fun BottomNavigationBar() {
     NavigationBarItem(
       icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
       label = { Text("HOME", fontSize = 10.sp, letterSpacing = 0.5.sp) },
-      selected = true,
-      onClick = { },
+      selected = currentScreen == Screen.HOME,
+      onClick = { onScreenSelected(Screen.HOME) },
       colors = NavigationBarItemDefaults.colors(
         selectedIconColor = Primary,
         selectedTextColor = TextPrimary,
@@ -483,10 +505,10 @@ fun BottomNavigationBar() {
       )
     )
     NavigationBarItem(
-      icon = { Icon(Icons.Filled.Explore, contentDescription = "Explore") },
-      label = { Text("EXPLORE", fontSize = 10.sp, letterSpacing = 0.5.sp) },
-      selected = false,
-      onClick = { },
+      icon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
+      label = { Text("SEARCH", fontSize = 10.sp, letterSpacing = 0.5.sp) },
+      selected = currentScreen == Screen.SEARCH,
+      onClick = { onScreenSelected(Screen.SEARCH) },
       colors = NavigationBarItemDefaults.colors(
         selectedIconColor = Primary,
         selectedTextColor = TextPrimary,
@@ -498,8 +520,8 @@ fun BottomNavigationBar() {
     NavigationBarItem(
       icon = { Icon(Icons.Filled.LibraryMusic, contentDescription = "Library") },
       label = { Text("LIBRARY", fontSize = 10.sp, letterSpacing = 0.5.sp) },
-      selected = false,
-      onClick = { },
+      selected = currentScreen == Screen.LIBRARY,
+      onClick = { onScreenSelected(Screen.LIBRARY) },
       colors = NavigationBarItemDefaults.colors(
         selectedIconColor = Primary,
         selectedTextColor = TextPrimary,
@@ -532,8 +554,11 @@ fun HorizontalSongSection(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            items(songs) { song ->
-                SongCard(song = song, onClick = { onSongClick(song) })
+            if (songs.isNotEmpty()) {
+                items(Integer.MAX_VALUE) { index ->
+                    val song = songs[index % songs.size]
+                    SongCard(song = song, onClick = { onSongClick(song) })
+                }
             }
         }
     }
