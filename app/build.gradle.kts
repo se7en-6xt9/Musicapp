@@ -23,7 +23,7 @@ android {
   signingConfigs {
     create("release") {
       val keystorePath = System.getenv("KEYSTORE_PATH")
-      if (keystorePath != null && file(keystorePath).exists()) {
+      if (!keystorePath.isNullOrBlank() && file(keystorePath).exists()) {
           storeFile = file(keystorePath)
           storePassword = System.getenv("STORE_PASSWORD")
           keyAlias = "upload"
@@ -47,7 +47,7 @@ android {
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       val keystorePath = System.getenv("KEYSTORE_PATH")
-      if (keystorePath != null && file(keystorePath).exists()) {
+      if (!keystorePath.isNullOrBlank() && file(keystorePath).exists()) {
           signingConfig = signingConfigs.getByName("release")
       }
     }
