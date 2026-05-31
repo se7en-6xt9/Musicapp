@@ -555,7 +555,7 @@ fun HorizontalSongSection(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             if (songs.isNotEmpty()) {
-                items(Integer.MAX_VALUE) { index ->
+                items(500) { index ->
                     val song = songs[index % songs.size]
                     SongCard(song = song, onClick = { onSongClick(song) })
                 }

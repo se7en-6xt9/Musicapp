@@ -21,6 +21,9 @@ jobs:
         distribution: 'temurin'
         cache: gradle
     
+    - name: Regenerate Gradle Wrapper
+      run: gradle wrapper
+
     - name: Make gradlew executable
       run: chmod +x ./gradlew
     

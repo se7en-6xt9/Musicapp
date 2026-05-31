@@ -80,7 +80,7 @@ fun SearchScreen(viewModel: MainViewModel, mediaController: MediaController?) {
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 if (uiState.searchResults.isNotEmpty()) {
-                    items(Integer.MAX_VALUE) { index ->
+                    items(500) { index ->
                         val song = uiState.searchResults[index % uiState.searchResults.size]
                         SquareSongItem(song = song) {
                             viewModel.playSong(song, uiState.searchResults)
